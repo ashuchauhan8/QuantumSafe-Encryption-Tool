@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}File Upload and Retrieval{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto bg-white shadow-md rounded p-6">
+    <h2 class="text-2xl font-bold mb-4">Upload File</h2>
+    
+    <!-- Message container -->
+    <div id="message-box" class="hidden mb-4 p-4 rounded"></div>
+    
+    <form id="upload-form" onsubmit="uploadFile(event)" enctype="multipart/form-data" class="space-y-4">
+        <input type="file" name="file" required class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:border file:border-gray-300 file:rounded file:bg-gray-100">
+        <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Upload</button>
+    </form>
+
+    <h2 class="text-2xl font-bold mt-6 mb-4">Retrieve File</h2>
+    <form id="retrieve-form" enctype="multipart/form-data" class="space-y-4">
+        <label for="file-select" class="block text-sm font-medium text-gray-700">Select a file:</label>
+        <select id="file-select" name="filename" required class="block w-full px-3 py-2 border border-gray-300 rounded">
+            <!-- Options will be dynamically populated -->
+        </select>
+        <div>
+            <label for="key-file" class="block text-sm font-medium text-gray-700">Upload the key file:</label>
+            <input type="file" id="key-file" name="key" required class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:border file:border-gray-300 file:rounded file:bg-gray-100">
+        </div>
+        <button type="submit" class="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">Retrieve</button>
+    </form>
+</div>
+
+<!-- Loading Spinner -->
+<div id="loading-spinner" class="hidden fixed inset-0 bg-gray-800 bg-opacity-50 flex items-center justify-center z-50">
+    <div class="loader border-t-4 border-b-4 border-blue-600 rounded-full w-16 h-16 animate-spin"></div>
+</div>
+
+<script>
+    // Show and hide the loading spinner
+    function showLoading(show) {
+        const spinner = document.getElementById('loading-spinner');
+        if (show) {
+            spinner.classList.remove('hidden');
+        } else {
+            spinner.classList.add('hidden');
+        }
+    }
+
+    // Display messages to the user
+    function showMessage(message, type) {
+        const messageBox = document.getElementById('message-box');
+        messageBox.textContent = message;
+        messageBox.className = `mb-4 p-4 rounded ${type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`;
+        messageBox.classList.remove('hidden');
+
+        // Auto-hide the message after 5 seconds
+        setTimeout(() => {
+            messageBox.classList.add('hidden');
+        }, 5000);
+    }
+
+    // Fetch files from the server
+    async function fetchFiles() {
+        showLoading(true);
+        try {
+            const response = await fetch('/files');
+            if (!response.ok) {
+                throw new Error('Failed to fetch file list.');
+            }
+
+            const data = await response.json();
+            const fileSelect = document.getElementById('file-select');
+            fileSelect.innerHTML = ""; // Clear existing options
+
+            data.files.forEach(file => {
+                const option = document.createElement('option');
+                option.value = file;
+                option.textContent = file;
+                fileSelect.appendChild(option);
+            });
+            showMessage('File list updated successfully.', 'success');
+        } catch (err) {
+            showMessage(`Error fetching files: ${err.message}`, 'error');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Upload file to the server
+    async function uploadFile(event) {
+        event.preventDefault();
+        showLoading(true);
+        const formData = new FormData(document.getElementById('upload-form'));
+        try {
+            const response = await fetch('/upload', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = "encryption-key.symkey";
+                a.click();
+                await fetchFiles();
+                showMessage('File uploaded successfully!', 'success');
+            } else {
+                showMessage('File upload failed.', 'error');
+            }
+        } catch (err) {
+            showMessage(`An error occurred during upload: ${err.message}`, 'error');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Retrieve file from the server
+    async function retrieveFile(event) {
+        event.preventDefault();
+        showLoading(true);
+        const formData = new FormData(document.getElementById('retrieve-form'));
+
+        try {
+            const response = await fetch('/retrieve', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const filename = formData.get('filename');
+                a.download = filename;
+                a.click();
+                showMessage('File retrieved successfully!', 'success');
+            } else {
+                const errorData = await response.json();
+                showMessage(`Error: ${errorData.error}`, 'error');
+            }
+        } catch (err) {
+            showMessage(`An error occurred: ${err.message}`, 'error');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    // Initialize event listeners on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchFiles();
+        document.getElementById('retrieve-form').addEventListener('submit', retrieveFile);
+    });
+</script>
+
+<style>
+    .loader {
+        border-width: 4px;
+        border-style: solid;
+        border-color: #ddd transparent transparent transparent;
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .hidden {
+        display: none;
+    }
+</style>
+{% endblock %}
